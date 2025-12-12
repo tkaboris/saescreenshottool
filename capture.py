@@ -1,21 +1,40 @@
 from mss import mss
 from PIL import Image
 import os
-import tkinter as tk
 from config import Config
 import ctypes
 import time
+import io
+import win32clipboard
+
+
+def set_dpi_awareness():
+    """Set process DPI awareness to get correct screen dimensions"""
+    try:
+        # Try Windows 10+ method first
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+    except:
+        try:
+            # Fallback to Windows 8.1 method
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)  # PROCESS_SYSTEM_DPI_AWARE
+        except:
+            try:
+                # Fallback to older method
+                ctypes.windll.user32.SetProcessDPIAware()
+            except:
+                pass
+
+
+# Set DPI awareness at module load time
+set_dpi_awareness()
 
 
 def get_dpi_scale():
     """Get Windows DPI scaling factor"""
     try:
-        # Get DPI for primary monitor
-        user32 = ctypes.windll.user32
-        user32.SetProcessDPIAware()
-        dc = user32.GetDC(0)
+        dc = ctypes.windll.user32.GetDC(0)
         dpi = ctypes.windll.gdi32.GetDeviceCaps(dc, 88)  # LOGPIXELSX
-        user32.ReleaseDC(0, dc)
+        ctypes.windll.user32.ReleaseDC(0, dc)
         return dpi / 96.0  # 96 is standard DPI
     except:
         return 1.0
@@ -24,10 +43,8 @@ def get_dpi_scale():
 def get_screen_size():
     """Get actual physical screen size in pixels"""
     try:
-        user32 = ctypes.windll.user32
-        user32.SetProcessDPIAware()
-        width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
-        height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
+        width = ctypes.windll.user32.GetSystemMetrics(0)  # SM_CXSCREEN
+        height = ctypes.windll.user32.GetSystemMetrics(1)  # SM_CYSCREEN
         return width, height
     except:
         return 1920, 1080
@@ -43,6 +60,8 @@ class RegionSelector:
         
     def select_region(self):
         """Show fullscreen overlay to select region"""
+        import tkinter as tk
+        
         # Get actual physical screen dimensions
         screen_width, screen_height = get_screen_size()
         
@@ -123,9 +142,17 @@ class RegionSelector:
 
 
 def capture_fullscreen():
-    """Capture entire screen"""
+    """Capture entire screen using physical dimensions"""
+    screen_width, screen_height = get_screen_size()
+    
     with mss() as sct:
-        monitor = sct.monitors[1]  # Primary monitor
+        # Use explicit monitor definition with physical dimensions
+        monitor = {
+            "top": 0,
+            "left": 0,
+            "width": screen_width,
+            "height": screen_height
+        }
         screenshot = sct.grab(monitor)
         img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
         return img
@@ -171,6 +198,22 @@ def capture_predefined(top_offset, bottom_offset, left_offset=0, right_offset=0)
         raise ValueError(f"Invalid predefined area: {width}x{height}")
     
     return capture_region((x, y, width, height))
+
+
+def copy_to_clipboard(img):
+    """Copy PIL Image to Windows clipboard"""
+    # Convert to BMP format for clipboard
+    output = io.BytesIO()
+    img.convert('RGB').save(output, 'BMP')
+    data = output.getvalue()[14:]  # Remove BMP header
+    output.close()
+    
+    win32clipboard.OpenClipboard()
+    try:
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+    finally:
+        win32clipboard.CloseClipboard()
 
 
 def save_screenshot(img):

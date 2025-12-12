@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 import json
 import os
 
@@ -19,14 +19,14 @@ class HotkeyEntry(tk.Frame):
         self.entry = tk.Entry(
             self,
             textvariable=self.entry_var,
-            font=('Arial', 10),
+            font=('Arial', 11),
             bg='white',
             fg='black',
-            width=12,
+            width=14,
             justify='center',
             state='readonly'
         )
-        self.entry.pack(side=tk.LEFT, padx=(0, 8))
+        self.entry.pack(side=tk.LEFT, padx=(0, 10), ipady=4)
         
         # Record button
         self.record_btn = tk.Button(
@@ -35,13 +35,13 @@ class HotkeyEntry(tk.Frame):
             command=self.start_recording,
             bg='#4a4a4a',
             fg='white',
-            font=('Arial', 9),
-            padx=8,
-            pady=2,
+            font=('Arial', 10),
+            padx=12,
+            pady=4,
             relief=tk.FLAT,
             cursor='hand2'
         )
-        self.record_btn.pack(side=tk.LEFT, padx=(0, 5))
+        self.record_btn.pack(side=tk.LEFT, padx=(0, 6))
         
         # Clear button
         self.clear_btn = tk.Button(
@@ -50,9 +50,9 @@ class HotkeyEntry(tk.Frame):
             command=self.clear_hotkey,
             bg='#5a3a3a',
             fg='white',
-            font=('Arial', 9),
-            padx=8,
-            pady=2,
+            font=('Arial', 10),
+            padx=12,
+            pady=4,
             relief=tk.FLAT,
             cursor='hand2'
         )
@@ -194,6 +194,10 @@ class SettingsManager:
             'predefined_bottom_offset': 50,  # Default to exclude taskbar
             'predefined_left_offset': 0,
             'predefined_right_offset': 0,
+            # Output options
+            'region_copy_to_clipboard': True,  # Default: copy to clipboard
+            'fullscreen_copy_to_clipboard': False,  # Default: save to file
+            'predefined_copy_to_clipboard': False,  # Default: save to file
         }
         
         if os.path.exists(self.settings_file):
@@ -230,42 +234,65 @@ class SettingsManager:
         window.configure(bg='#2b2b2b')
         window.resizable(True, True)
         
-        # Larger base size
-        base_width = 750
-        base_height = 750
+        # Get DPI scale factor for proper sizing
+        try:
+            dpi_scale = window.winfo_fpixels('1i') / 72.0
+        except:
+            dpi_scale = 1.0
         
-        window.minsize(500, 500)
+        # Much larger size to fit everything, scaled for DPI
+        base_width = int(700 * max(1.0, dpi_scale * 0.8))
+        base_height = int(900 * max(1.0, dpi_scale * 0.8))
+        
+        window.minsize(600, 700)
         
         # Center the window
         window.update_idletasks()
         screen_width = window.winfo_screenwidth()
         screen_height = window.winfo_screenheight()
         x = (screen_width - base_width) // 2
-        y = (screen_height - base_height) // 2
+        y = max(10, (screen_height - base_height) // 2)
         window.geometry(f'{base_width}x{base_height}+{x}+{y}')
         window.attributes('-topmost', True)
         window.focus_force()
         
-        # Create scrollable frame
-        main_frame = tk.Frame(window, bg='#2b2b2b')
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # Create scrollable canvas
+        main_canvas = tk.Canvas(window, bg='#2b2b2b', highlightthickness=0)
+        scrollbar = tk.Scrollbar(window, orient="vertical", command=main_canvas.yview)
+        scrollable_frame = tk.Frame(main_canvas, bg='#2b2b2b')
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+        
+        main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        main_canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Enable mousewheel scrolling
+        def on_mousewheel(event):
+            main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        main_canvas.bind_all("<MouseWheel>", on_mousewheel)
+        
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        main_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         # Title
         title_label = tk.Label(
-            main_frame,
+            scrollable_frame,
             text="⚙️ Settings",
             bg='#2b2b2b',
             fg='white',
-            font=('Arial', 18, 'bold')
+            font=('Arial', 22, 'bold')
         )
-        title_label.pack(pady=20)
+        title_label.pack(pady=25, padx=30, anchor='w')
         
         # Main content frame
-        content_frame = tk.Frame(main_frame, bg='#2b2b2b')
+        content_frame = tk.Frame(scrollable_frame, bg='#2b2b2b')
         content_frame.pack(fill=tk.BOTH, expand=True, padx=30)
         
         # === Save Location Section ===
-        location_frame = tk.Frame(content_frame, bg='#3c3c3c', padx=25, pady=15)
+        location_frame = tk.Frame(content_frame, bg='#3c3c3c', padx=25, pady=20)
         location_frame.pack(fill=tk.X, pady=(0, 15))
         
         tk.Label(
@@ -273,8 +300,8 @@ class SettingsManager:
             text="📁 Save Location",
             bg='#3c3c3c',
             fg='white',
-            font=('Arial', 12, 'bold')
-        ).pack(anchor='w', pady=(0, 10))
+            font=('Arial', 14, 'bold')
+        ).pack(anchor='w', pady=(0, 12))
         
         path_frame = tk.Frame(location_frame, bg='#3c3c3c')
         path_frame.pack(fill=tk.X)
@@ -284,7 +311,7 @@ class SettingsManager:
         path_display = tk.Entry(
             path_frame,
             textvariable=path_var,
-            font=('Arial', 10),
+            font=('Arial', 11),
             bg='white',
             fg='black',
             insertbackground='black',
@@ -308,15 +335,15 @@ class SettingsManager:
             bg='#4a4a4a',
             fg='white',
             padx=15,
-            pady=5,
-            font=('Arial', 10),
+            pady=8,
+            font=('Arial', 11),
             relief=tk.FLAT,
             cursor='hand2'
         )
         browse_btn.pack(side=tk.LEFT)
         
         # === Hotkeys Section ===
-        hotkey_frame = tk.Frame(content_frame, bg='#3c3c3c', padx=25, pady=15)
+        hotkey_frame = tk.Frame(content_frame, bg='#3c3c3c', padx=25, pady=20)
         hotkey_frame.pack(fill=tk.X, pady=(0, 15))
         
         tk.Label(
@@ -324,8 +351,8 @@ class SettingsManager:
             text="⌨️ Hotkeys",
             bg='#3c3c3c',
             fg='white',
-            font=('Arial', 12, 'bold')
-        ).pack(anchor='w', pady=(0, 10))
+            font=('Arial', 14, 'bold')
+        ).pack(anchor='w', pady=(0, 12))
         
         # Hotkey rows
         hotkeys_container = tk.Frame(hotkey_frame, bg='#3c3c3c')
@@ -333,46 +360,140 @@ class SettingsManager:
         
         # Fullscreen hotkey
         row1 = tk.Frame(hotkeys_container, bg='#3c3c3c')
-        row1.pack(fill=tk.X, pady=5)
-        tk.Label(row1, text="Capture Fullscreen:", bg='#3c3c3c', fg='white', font=('Arial', 10), width=20, anchor='w').pack(side=tk.LEFT)
+        row1.pack(fill=tk.X, pady=6)
+        tk.Label(row1, text="Capture Fullscreen:", bg='#3c3c3c', fg='white', font=('Arial', 11), width=20, anchor='w').pack(side=tk.LEFT)
         hotkey_fullscreen = HotkeyEntry(row1, self.settings.get('hotkey_fullscreen', 'Alt+S'))
         hotkey_fullscreen.pack(side=tk.LEFT)
         
         # Region hotkey
         row2 = tk.Frame(hotkeys_container, bg='#3c3c3c')
-        row2.pack(fill=tk.X, pady=5)
-        tk.Label(row2, text="Capture Region:", bg='#3c3c3c', fg='white', font=('Arial', 10), width=20, anchor='w').pack(side=tk.LEFT)
+        row2.pack(fill=tk.X, pady=6)
+        tk.Label(row2, text="Capture Region:", bg='#3c3c3c', fg='white', font=('Arial', 11), width=20, anchor='w').pack(side=tk.LEFT)
         hotkey_region = HotkeyEntry(row2, self.settings.get('hotkey_region', 'Alt+R'))
         hotkey_region.pack(side=tk.LEFT)
         
         # Predefined area hotkey
         row3 = tk.Frame(hotkeys_container, bg='#3c3c3c')
-        row3.pack(fill=tk.X, pady=5)
-        tk.Label(row3, text="Capture Predefined:", bg='#3c3c3c', fg='white', font=('Arial', 10), width=20, anchor='w').pack(side=tk.LEFT)
+        row3.pack(fill=tk.X, pady=6)
+        tk.Label(row3, text="Capture Predefined:", bg='#3c3c3c', fg='white', font=('Arial', 11), width=20, anchor='w').pack(side=tk.LEFT)
         hotkey_predefined = HotkeyEntry(row3, self.settings.get('hotkey_predefined', ''))
         hotkey_predefined.pack(side=tk.LEFT)
         
         # Settings hotkey
         row4 = tk.Frame(hotkeys_container, bg='#3c3c3c')
-        row4.pack(fill=tk.X, pady=5)
-        tk.Label(row4, text="Open Settings:", bg='#3c3c3c', fg='white', font=('Arial', 10), width=20, anchor='w').pack(side=tk.LEFT)
+        row4.pack(fill=tk.X, pady=6)
+        tk.Label(row4, text="Open Settings:", bg='#3c3c3c', fg='white', font=('Arial', 11), width=20, anchor='w').pack(side=tk.LEFT)
         hotkey_settings = HotkeyEntry(row4, self.settings.get('hotkey_settings', 'Ctrl+P'))
         hotkey_settings.pack(side=tk.LEFT)
         
         # Help text
-        help_text = tk.Label(
+        tk.Label(
             hotkey_frame,
             text="Click 'Set' and press your desired key combination. Press Escape to cancel.",
             bg='#3c3c3c',
             fg='#888',
-            font=('Arial', 9),
+            font=('Arial', 10),
             wraplength=550,
             justify='left'
+        ).pack(anchor='w', pady=(12, 0))
+        
+        # === Output Options Section ===
+        output_frame = tk.Frame(content_frame, bg='#3c3c3c', padx=25, pady=20)
+        output_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        tk.Label(
+            output_frame,
+            text="📋 Output Options",
+            bg='#3c3c3c',
+            fg='white',
+            font=('Arial', 14, 'bold')
+        ).pack(anchor='w', pady=(0, 10))
+        
+        tk.Label(
+            output_frame,
+            text="Choose whether to copy to clipboard (for pasting) or save to file:",
+            bg='#3c3c3c',
+            fg='#aaa',
+            font=('Arial', 11)
+        ).pack(anchor='w', pady=(0, 15))
+        
+        # Custom toggle button class
+        class ToggleButton(tk.Frame):
+            def __init__(self, parent, text, initial_value=False, **kwargs):
+                super().__init__(parent, bg='#3c3c3c', **kwargs)
+                self.value = tk.BooleanVar(value=initial_value)
+                
+                self.label = tk.Label(
+                    self, text=text, bg='#3c3c3c', fg='white',
+                    font=('Arial', 11), width=20, anchor='w'
+                )
+                self.label.pack(side=tk.LEFT, padx=(0, 15))
+                
+                # Toggle button frame
+                self.btn_frame = tk.Frame(self, bg='#555', padx=2, pady=2)
+                self.btn_frame.pack(side=tk.LEFT)
+                
+                self.file_btn = tk.Button(
+                    self.btn_frame, text="💾 Save File",
+                    command=lambda: self.set_value(False),
+                    font=('Arial', 10), padx=12, pady=6,
+                    relief=tk.FLAT, cursor='hand2'
+                )
+                self.file_btn.pack(side=tk.LEFT, padx=1)
+                
+                self.clip_btn = tk.Button(
+                    self.btn_frame, text="📋 Clipboard",
+                    command=lambda: self.set_value(True),
+                    font=('Arial', 10), padx=12, pady=6,
+                    relief=tk.FLAT, cursor='hand2'
+                )
+                self.clip_btn.pack(side=tk.LEFT, padx=1)
+                
+                self.update_buttons()
+                
+            def set_value(self, val):
+                self.value.set(val)
+                self.update_buttons()
+                
+            def update_buttons(self):
+                if self.value.get():
+                    # Clipboard selected
+                    self.clip_btn.configure(bg='#4a9f4a', fg='white')
+                    self.file_btn.configure(bg='#4a4a4a', fg='#aaa')
+                else:
+                    # File selected
+                    self.file_btn.configure(bg='#4a9f4a', fg='white')
+                    self.clip_btn.configure(bg='#4a4a4a', fg='#aaa')
+                    
+            def get(self):
+                return self.value.get()
+        
+        # Toggle buttons for each capture type
+        clipboard_toggles = {}
+        
+        region_toggle = ToggleButton(
+            output_frame, "Region capture:",
+            self.settings.get('region_copy_to_clipboard', True)
         )
-        help_text.pack(anchor='w', pady=(10, 0))
+        region_toggle.pack(fill=tk.X, pady=8)
+        clipboard_toggles['region'] = region_toggle
+        
+        fullscreen_toggle = ToggleButton(
+            output_frame, "Fullscreen capture:",
+            self.settings.get('fullscreen_copy_to_clipboard', False)
+        )
+        fullscreen_toggle.pack(fill=tk.X, pady=8)
+        clipboard_toggles['fullscreen'] = fullscreen_toggle
+        
+        predefined_toggle = ToggleButton(
+            output_frame, "Predefined capture:",
+            self.settings.get('predefined_copy_to_clipboard', False)
+        )
+        predefined_toggle.pack(fill=tk.X, pady=8)
+        clipboard_toggles['predefined'] = predefined_toggle
         
         # === Predefined Area Section ===
-        predefined_frame = tk.Frame(content_frame, bg='#3c3c3c', padx=25, pady=15)
+        predefined_frame = tk.Frame(content_frame, bg='#3c3c3c', padx=25, pady=20)
         predefined_frame.pack(fill=tk.X, pady=(0, 15))
         
         tk.Label(
@@ -380,7 +501,7 @@ class SettingsManager:
             text="📐 Predefined Capture Area",
             bg='#3c3c3c',
             fg='white',
-            font=('Arial', 12, 'bold')
+            font=('Arial', 14, 'bold')
         ).pack(anchor='w', pady=(0, 5))
         
         tk.Label(
@@ -388,8 +509,8 @@ class SettingsManager:
             text="Define margins to exclude from screen edges (in pixels)",
             bg='#3c3c3c',
             fg='#aaa',
-            font=('Arial', 9)
-        ).pack(anchor='w', pady=(0, 10))
+            font=('Arial', 11)
+        ).pack(anchor='w', pady=(0, 12))
         
         # Offset inputs grid
         offsets_container = tk.Frame(predefined_frame, bg='#3c3c3c')
@@ -397,41 +518,50 @@ class SettingsManager:
         
         # Top offset
         top_row = tk.Frame(offsets_container, bg='#3c3c3c')
-        top_row.pack(fill=tk.X, pady=3)
-        tk.Label(top_row, text="Top margin:", bg='#3c3c3c', fg='white', font=('Arial', 10), width=15, anchor='w').pack(side=tk.LEFT)
+        top_row.pack(fill=tk.X, pady=5)
+        tk.Label(top_row, text="Top margin:", bg='#3c3c3c', fg='white', font=('Arial', 11), width=14, anchor='w').pack(side=tk.LEFT)
         top_var = tk.StringVar(value=str(self.settings.get('predefined_top_offset', 0)))
-        top_entry = tk.Entry(top_row, textvariable=top_var, font=('Arial', 10), width=8, justify='center')
-        top_entry.pack(side=tk.LEFT, padx=(0, 5))
-        tk.Label(top_row, text="px  (exclude browser tabs, title bars)", bg='#3c3c3c', fg='#888', font=('Arial', 9)).pack(side=tk.LEFT)
+        top_entry = tk.Entry(top_row, textvariable=top_var, font=('Arial', 11), width=8, justify='center')
+        top_entry.pack(side=tk.LEFT, padx=(0, 8), ipady=3)
+        tk.Label(top_row, text="px  (exclude browser tabs)", bg='#3c3c3c', fg='#888', font=('Arial', 10)).pack(side=tk.LEFT)
         
         # Bottom offset
         bottom_row = tk.Frame(offsets_container, bg='#3c3c3c')
-        bottom_row.pack(fill=tk.X, pady=3)
-        tk.Label(bottom_row, text="Bottom margin:", bg='#3c3c3c', fg='white', font=('Arial', 10), width=15, anchor='w').pack(side=tk.LEFT)
+        bottom_row.pack(fill=tk.X, pady=5)
+        tk.Label(bottom_row, text="Bottom margin:", bg='#3c3c3c', fg='white', font=('Arial', 11), width=14, anchor='w').pack(side=tk.LEFT)
         bottom_var = tk.StringVar(value=str(self.settings.get('predefined_bottom_offset', 50)))
-        bottom_entry = tk.Entry(bottom_row, textvariable=bottom_var, font=('Arial', 10), width=8, justify='center')
-        bottom_entry.pack(side=tk.LEFT, padx=(0, 5))
-        tk.Label(bottom_row, text="px  (exclude taskbar)", bg='#3c3c3c', fg='#888', font=('Arial', 9)).pack(side=tk.LEFT)
+        bottom_entry = tk.Entry(bottom_row, textvariable=bottom_var, font=('Arial', 11), width=8, justify='center')
+        bottom_entry.pack(side=tk.LEFT, padx=(0, 8), ipady=3)
+        tk.Label(bottom_row, text="px  (exclude taskbar)", bg='#3c3c3c', fg='#888', font=('Arial', 10)).pack(side=tk.LEFT)
         
         # Left offset
         left_row = tk.Frame(offsets_container, bg='#3c3c3c')
-        left_row.pack(fill=tk.X, pady=3)
-        tk.Label(left_row, text="Left margin:", bg='#3c3c3c', fg='white', font=('Arial', 10), width=15, anchor='w').pack(side=tk.LEFT)
+        left_row.pack(fill=tk.X, pady=5)
+        tk.Label(left_row, text="Left margin:", bg='#3c3c3c', fg='white', font=('Arial', 11), width=14, anchor='w').pack(side=tk.LEFT)
         left_var = tk.StringVar(value=str(self.settings.get('predefined_left_offset', 0)))
-        left_entry = tk.Entry(left_row, textvariable=left_var, font=('Arial', 10), width=8, justify='center')
-        left_entry.pack(side=tk.LEFT, padx=(0, 5))
-        tk.Label(left_row, text="px", bg='#3c3c3c', fg='#888', font=('Arial', 9)).pack(side=tk.LEFT)
+        left_entry = tk.Entry(left_row, textvariable=left_var, font=('Arial', 11), width=8, justify='center')
+        left_entry.pack(side=tk.LEFT, padx=(0, 8), ipady=3)
+        tk.Label(left_row, text="px", bg='#3c3c3c', fg='#888', font=('Arial', 10)).pack(side=tk.LEFT)
         
         # Right offset
         right_row = tk.Frame(offsets_container, bg='#3c3c3c')
-        right_row.pack(fill=tk.X, pady=3)
-        tk.Label(right_row, text="Right margin:", bg='#3c3c3c', fg='white', font=('Arial', 10), width=15, anchor='w').pack(side=tk.LEFT)
+        right_row.pack(fill=tk.X, pady=5)
+        tk.Label(right_row, text="Right margin:", bg='#3c3c3c', fg='white', font=('Arial', 11), width=14, anchor='w').pack(side=tk.LEFT)
         right_var = tk.StringVar(value=str(self.settings.get('predefined_right_offset', 0)))
-        right_entry = tk.Entry(right_row, textvariable=right_var, font=('Arial', 10), width=8, justify='center')
-        right_entry.pack(side=tk.LEFT, padx=(0, 5))
-        tk.Label(right_row, text="px", bg='#3c3c3c', fg='#888', font=('Arial', 9)).pack(side=tk.LEFT)
+        right_entry = tk.Entry(right_row, textvariable=right_var, font=('Arial', 11), width=8, justify='center')
+        right_entry.pack(side=tk.LEFT, padx=(0, 8), ipady=3)
+        tk.Label(right_row, text="px", bg='#3c3c3c', fg='#888', font=('Arial', 10)).pack(side=tk.LEFT)
         
         # Preview info
+        preview_label = tk.Label(
+            predefined_frame,
+            text="",
+            bg='#3c3c3c',
+            fg='#88ff88',
+            font=('Arial', 11)
+        )
+        preview_label.pack(anchor='w', pady=(12, 0))
+        
         def update_preview(*args):
             try:
                 top = int(top_var.get() or 0)
@@ -440,10 +570,9 @@ class SettingsManager:
                 right = int(right_var.get() or 0)
                 # Get screen size for preview
                 import ctypes
-                user32 = ctypes.windll.user32
-                user32.SetProcessDPIAware()
-                sw = user32.GetSystemMetrics(0)
-                sh = user32.GetSystemMetrics(1)
+                ctypes.windll.user32.SetProcessDPIAware()
+                sw = ctypes.windll.user32.GetSystemMetrics(0)
+                sh = ctypes.windll.user32.GetSystemMetrics(1)
                 width = sw - left - right
                 height = sh - top - bottom
                 preview_label.config(
@@ -452,15 +581,6 @@ class SettingsManager:
                 )
             except:
                 preview_label.config(text="Enter valid numbers", fg='#ff8888')
-        
-        preview_label = tk.Label(
-            predefined_frame,
-            text="",
-            bg='#3c3c3c',
-            fg='#88ff88',
-            font=('Arial', 10)
-        )
-        preview_label.pack(anchor='w', pady=(10, 0))
         
         # Bind updates
         top_var.trace_add('write', update_preview)
@@ -471,22 +591,21 @@ class SettingsManager:
         
         # === Info Section ===
         info_frame = tk.Frame(content_frame, bg='#2b2b2b')
-        info_frame.pack(fill=tk.X, pady=10)
+        info_frame.pack(fill=tk.X, pady=15)
         
-        info_label = tk.Label(
+        tk.Label(
             info_frame,
             text="⚠️ Changes to hotkeys require restarting the application to take effect.",
             bg='#2b2b2b',
             fg='#ffaa00',
-            font=('Arial', 9),
+            font=('Arial', 11),
             wraplength=550,
             justify='left'
-        )
-        info_label.pack()
+        ).pack()
         
         # === Button frame ===
-        button_frame = tk.Frame(window, bg='#2b2b2b')
-        button_frame.pack(side=tk.BOTTOM, pady=25)
+        button_frame = tk.Frame(scrollable_frame, bg='#2b2b2b')
+        button_frame.pack(pady=30)
         
         def save_and_close():
             new_folder = path_var.get()
@@ -540,6 +659,11 @@ class SettingsManager:
             self.settings['predefined_left_offset'] = left_offset
             self.settings['predefined_right_offset'] = right_offset
             
+            # Save clipboard options
+            self.settings['region_copy_to_clipboard'] = clipboard_toggles['region'].get()
+            self.settings['fullscreen_copy_to_clipboard'] = clipboard_toggles['fullscreen'].get()
+            self.settings['predefined_copy_to_clipboard'] = clipboard_toggles['predefined'].get()
+            
             if self.save_settings():
                 # Update config
                 from config import Config
@@ -550,6 +674,11 @@ class SettingsManager:
                 window.destroy()
             else:
                 messagebox.showerror("Error", "Failed to save settings")
+        
+        # Unbind mousewheel when closing
+        def on_close():
+            main_canvas.unbind_all("<MouseWheel>")
+            window.destroy()
                 
         save_btn = tk.Button(
             button_frame,
@@ -557,29 +686,29 @@ class SettingsManager:
             command=save_and_close,
             bg='#2d6a2d',
             fg='white',
-            padx=30,
-            pady=12,
-            font=('Arial', 11, 'bold'),
+            padx=35,
+            pady=15,
+            font=('Arial', 13, 'bold'),
             relief=tk.FLAT,
             cursor='hand2'
         )
-        save_btn.pack(side=tk.LEFT, padx=10)
+        save_btn.pack(side=tk.LEFT, padx=15)
         
         cancel_btn = tk.Button(
             button_frame,
             text="❌ Cancel",
-            command=window.destroy,
+            command=on_close,
             bg='#6a2d2d',
             fg='white',
-            padx=30,
-            pady=12,
-            font=('Arial', 11, 'bold'),
+            padx=35,
+            pady=15,
+            font=('Arial', 13, 'bold'),
             relief=tk.FLAT,
             cursor='hand2'
         )
-        cancel_btn.pack(side=tk.LEFT, padx=10)
+        cancel_btn.pack(side=tk.LEFT, padx=15)
         
-        window.protocol("WM_DELETE_WINDOW", window.destroy)
+        window.protocol("WM_DELETE_WINDOW", on_close)
         window.mainloop()
 
 

@@ -4,7 +4,7 @@ import win32gui
 import threading
 import time
 import queue
-from capture import capture_fullscreen, capture_region, RegionSelector, save_screenshot
+from capture import capture_fullscreen, capture_region, capture_predefined, RegionSelector, save_screenshot
 from editor import edit_image
 from config import Config
 from settings import settings_manager
@@ -109,7 +109,8 @@ class HotkeyThread(threading.Thread):
         hotkey_configs = [
             (1, settings_manager.get('hotkey_fullscreen', 'Alt+S'), "Fullscreen", 'fullscreen'),
             (2, settings_manager.get('hotkey_region', 'Alt+R'), "Region", 'region'),
-            (3, settings_manager.get('hotkey_settings', 'Ctrl+P'), "Settings", 'settings'),
+            (3, settings_manager.get('hotkey_predefined', ''), "Predefined", 'predefined'),
+            (4, settings_manager.get('hotkey_settings', 'Ctrl+P'), "Settings", 'settings'),
         ]
         
         print("\nRegistering hotkeys...")
@@ -180,7 +181,7 @@ def take_screenshot_region():
     region = selector.select_region()
     
     if region:
-        print("📸 Capturing selected region...")
+        print(f"📸 Capturing region: {region[2]}x{region[3]} at ({region[0]},{region[1]})")
         img = capture_region(region)
         
         edited_img = edit_image(img)
@@ -194,12 +195,39 @@ def take_screenshot_region():
         print("❌ Cancelled")
 
 
+def take_screenshot_predefined():
+    """Capture predefined area based on settings"""
+    top = settings_manager.get('predefined_top_offset', 0)
+    bottom = settings_manager.get('predefined_bottom_offset', 50)
+    left = settings_manager.get('predefined_left_offset', 0)
+    right = settings_manager.get('predefined_right_offset', 0)
+    
+    print(f"📐 Capturing predefined area (margins: top={top}, bottom={bottom}, left={left}, right={right})...")
+    
+    try:
+        img = capture_predefined(top, bottom, left, right)
+        
+        edited_img = edit_image(img)
+        
+        if edited_img:
+            filepath = save_screenshot(edited_img)
+            print(f"✓ Saved: {filepath}")
+        else:
+            print("❌ Cancelled")
+    except ValueError as e:
+        print(f"❌ Error: {e}")
+    except Exception as e:
+        print(f"❌ Capture failed: {e}")
+
+
 def process_action(action):
     """Process action in main thread"""
     if action == 'fullscreen':
         take_screenshot_fullscreen()
     elif action == 'region':
         take_screenshot_region()
+    elif action == 'predefined':
+        take_screenshot_predefined()
     elif action == 'settings':
         settings_manager.show_settings_window()
 
@@ -208,7 +236,14 @@ def main():
     # Load current hotkey settings for display
     hk_full = settings_manager.get('hotkey_fullscreen', 'Alt+S')
     hk_region = settings_manager.get('hotkey_region', 'Alt+R')
+    hk_predefined = settings_manager.get('hotkey_predefined', '')
     hk_settings = settings_manager.get('hotkey_settings', 'Ctrl+P')
+    
+    # Load predefined area settings
+    top = settings_manager.get('predefined_top_offset', 0)
+    bottom = settings_manager.get('predefined_bottom_offset', 50)
+    left = settings_manager.get('predefined_left_offset', 0)
+    right = settings_manager.get('predefined_right_offset', 0)
     
     print("=" * 60)
     print("  📷 Screenshot Tool Running")
@@ -216,8 +251,11 @@ def main():
     print(f"  Hotkeys (from settings):")
     print(f"    {hk_full or '(disabled)'} = Capture Fullscreen")
     print(f"    {hk_region or '(disabled)'} = Capture Region")
+    print(f"    {hk_predefined or '(disabled)'} = Capture Predefined Area")
     print(f"    {hk_settings or '(disabled)'} = Open Settings")
     print(f"    CTRL+C = Quit")
+    print(f"\n  Predefined area margins:")
+    print(f"    Top: {top}px, Bottom: {bottom}px, Left: {left}px, Right: {right}px")
     print(f"\n  Save location: {Config.SAVE_FOLDER}")
     print("=" * 60)
     

@@ -7,9 +7,6 @@ class Config:
     # Load from settings
     SAVE_FOLDER = settings_manager.get('save_folder')
     
-    # Hotkey (managed by main.py now)
-    HOTKEY = 'ctrl+shift+s'
-    
     # Filename pattern
     @staticmethod
     def get_filename():

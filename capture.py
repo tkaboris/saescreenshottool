@@ -216,9 +216,12 @@ def copy_to_clipboard(img):
         win32clipboard.CloseClipboard()
 
 
-def save_screenshot(img):
-    """Save image with unique filename"""
+def save_screenshot(img, metadata=None):
+    """Save image with unique filename and optional metadata"""
     Config.ensure_folder()
     filepath = os.path.join(Config.SAVE_FOLDER, Config.get_filename())
-    img.save(filepath)
+    if metadata:
+        img.save(filepath, pnginfo=metadata)
+    else:
+        img.save(filepath)
     return filepath

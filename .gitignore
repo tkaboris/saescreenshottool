@@ -1,0 +1,16 @@
+# Credentials (The secrets GitHub blocked)
+credentials.json
+token.json
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Build and Dist (Executable files)
+build/
+dist/
+installer_output/
+ViewClipper.spec
+
+# Screenshots
+screenshots/*.png

@@ -4,6 +4,7 @@ import win32gui
 import threading
 import time
 import queue
+from drive_upload import upload_to_drive
 from capture import (
     capture_fullscreen, capture_region, capture_predefined, 
     RegionSelector, save_screenshot, copy_to_clipboard
@@ -163,6 +164,25 @@ class HotkeyThread(threading.Thread):
                 win32gui.UnregisterHotKey(None, hotkey_id)
 
 
+def process_editor_result(result):
+    """Handle the result from the editor (Save Local vs Save Cloud)"""
+    if not result:
+        print("❌ Cancelled")
+        return
+
+    # Unpack the new 3-part tuple
+    img, metadata, save_action = result
+    
+    # Always save locally first
+    filepath = save_screenshot(img, metadata)
+    print(f"✓ Saved locally: {filepath}")
+    
+    # If user clicked "Save Cloud", then upload
+    if save_action == 'cloud':
+        print("☁️ Uploading to Drive...")
+        upload_to_drive(filepath)
+
+
 def take_screenshot_fullscreen():
     print("📸 Capturing full screen...")
     img = capture_fullscreen()
@@ -170,18 +190,11 @@ def take_screenshot_fullscreen():
     copy_to_clip = settings_manager.get('fullscreen_copy_to_clipboard', False)
     
     if copy_to_clip:
-        # Copy directly to clipboard, no editor
         copy_to_clipboard(img)
         print("📋 Copied to clipboard!")
     else:
-        # Open editor, then save
-        edited_img = edit_image(img)
-        
-        if edited_img:
-            filepath = save_screenshot(edited_img)
-            print(f"✓ Saved: {filepath}")
-        else:
-            print("❌ Cancelled")
+        result = edit_image(img)
+        process_editor_result(result)
 
 
 def take_screenshot_region():
@@ -198,18 +211,11 @@ def take_screenshot_region():
         copy_to_clip = settings_manager.get('region_copy_to_clipboard', True)
         
         if copy_to_clip:
-            # Copy directly to clipboard, no editor
             copy_to_clipboard(img)
             print("📋 Copied to clipboard!")
         else:
-            # Open editor, then save
-            edited_img = edit_image(img)
-            
-            if edited_img:
-                filepath = save_screenshot(edited_img)
-                print(f"✓ Saved: {filepath}")
-            else:
-                print("❌ Cancelled")
+            result = edit_image(img)
+            process_editor_result(result)
     else:
         print("❌ Cancelled")
 
@@ -229,18 +235,11 @@ def take_screenshot_predefined():
         copy_to_clip = settings_manager.get('predefined_copy_to_clipboard', False)
         
         if copy_to_clip:
-            # Copy directly to clipboard, no editor
             copy_to_clipboard(img)
             print("📋 Copied to clipboard!")
         else:
-            # Open editor, then save
-            edited_img = edit_image(img)
-            
-            if edited_img:
-                filepath = save_screenshot(edited_img)
-                print(f"✓ Saved: {filepath}")
-            else:
-                print("❌ Cancelled")
+            result = edit_image(img)
+            process_editor_result(result)
     except ValueError as e:
         print(f"❌ Error: {e}")
     except Exception as e:
@@ -278,12 +277,12 @@ def main():
     predef_clip = settings_manager.get('predefined_copy_to_clipboard', False)
     
     print("=" * 60)
-    print("  📷 Screenshot Tool Running")
+    print("  📷 ViewClipper - Screenshot Tool (with Google Drive Sync)")
     print("=" * 60)
-    print(f"  Hotkeys (from settings):")
-    print(f"    {hk_full or '(disabled)'} = Fullscreen {'→ clipboard' if full_clip else '→ save'}")
-    print(f"    {hk_region or '(disabled)'} = Region {'→ clipboard' if region_clip else '→ save'}")
-    print(f"    {hk_predefined or '(disabled)'} = Predefined {'→ clipboard' if predef_clip else '→ save'}")
+    print(f"  Hotkeys:")
+    print(f"    {hk_full or '(disabled)'} = Fullscreen {'→ clipboard' if full_clip else '→ editor'}")
+    print(f"    {hk_region or '(disabled)'} = Region {'→ clipboard' if region_clip else '→ editor'}")
+    print(f"    {hk_predefined or '(disabled)'} = Predefined {'→ clipboard' if predef_clip else '→ editor'}")
     print(f"    {hk_settings or '(disabled)'} = Open Settings")
     print(f"    CTRL+C = Quit")
     print(f"\n  Predefined area margins:")

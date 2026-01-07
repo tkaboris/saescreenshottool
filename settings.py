@@ -230,7 +230,7 @@ class SettingsManager:
     def show_settings_window(self):
         """Show settings GUI"""
         window = tk.Tk()
-        window.title("Screenshot Tool - Settings")
+        window.title("ViewClipper - Settings")
         window.configure(bg='#2b2b2b')
         window.resizable(True, True)
         
@@ -274,7 +274,7 @@ class SettingsManager:
         # Title
         title_label = tk.Label(
             scrollable_frame,
-            text="⚙️ Settings",
+            text="⚙️ ViewClipper Settings",
             bg='#2b2b2b',
             fg='white',
             font=('Arial', 16, 'bold')

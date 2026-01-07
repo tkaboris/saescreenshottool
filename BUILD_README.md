@@ -24,7 +24,7 @@ This creates `dist\ViewClipper.exe`
 
 ### 1. Setup Environment
 ```powershell
-cd C:\Users\tkabo\Documents\screenshot-tool
+cd C:\Users\YourPath\Documents\screenshot-tool
 .\venv\Scripts\Activate
 pip install -r requirements.txt
 ```

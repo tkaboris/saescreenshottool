@@ -407,12 +407,21 @@ powershellcd C:\Users\tkabo\Documents\screenshot-tool; .\venv\Scripts\Activate; 
 Some Screenshots and commands
 Registering hotkeys...
   ✓ Fullscreen: Ctrl+S
+
   ✓ Region: Ctrl+Alt+T
+
   ✓ Predefined: Ctrl+Alt+P
+
   ✓ Settings: Ctrl+P
 
-
+Full Screen
 <img src="./assets/FullScreen.png" width="500">
+Presets
 <img src="./assets/Presets.png" width="500">
+Region
 <img src="./assets/Region.png" width="500">
+Settings
 <img src="./assets/Settings.png" width="500">
+
+minimal process consumption
+<img src="./assets/Processes.png" width="500">

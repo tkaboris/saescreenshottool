@@ -402,3 +402,17 @@ powershellpython print_structure.py
 
 Quick Copy-Paste (all at once)
 powershellcd C:\Users\tkabo\Documents\screenshot-tool; .\venv\Scripts\Activate; python main.py
+
+
+Some Screenshots and commands
+Registering hotkeys...
+  ✓ Fullscreen: Ctrl+S
+  ✓ Region: Ctrl+Alt+T
+  ✓ Predefined: Ctrl+Alt+P
+  ✓ Settings: Ctrl+P
+
+
+<img src="./assets/FullScreen.png" width="500">
+<img src="./assets/Presets.png" width="500">
+<img src="./assets/Region.png" width="500">
+<img src="./assets/Settings.png" width="500">

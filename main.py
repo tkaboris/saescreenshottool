@@ -4,6 +4,10 @@ import win32gui
 import threading
 import time
 import queue
+import sys
+from PIL import Image
+import pystray
+from pystray import MenuItem as item
 from drive_upload import upload_to_drive
 from capture import (
     capture_fullscreen, capture_region, capture_predefined, 
@@ -15,6 +19,23 @@ from settings import settings_manager
 
 # Queue for communicating with main thread
 action_queue = queue.Queue()
+
+# Global system tray icon
+tray_icon = None
+
+# Queue for communicating with main thread
+action_queue = queue.Queue()
+
+# Global system tray icon
+tray_icon = None
+
+# ADD THESE 5 LINES:
+import win32event
+import winerror
+mutex = win32event.CreateMutex(None, False, 'ViewClipperSingleInstanceMutex')
+if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+    print("ViewClipper is already running!")
+    sys.exit(0)
 
 
 def parse_hotkey(hotkey_str):
@@ -258,7 +279,58 @@ def process_action(action):
         settings_manager.show_settings_window()
 
 
+def on_settings_clicked(icon, item):
+    """Tray menu: Settings clicked"""
+    action_queue.put('settings')
+
+
+def on_exit_clicked(icon, item):
+    """Tray menu: Exit clicked"""
+    print("\n👋 Exiting from tray menu...")
+    icon.stop()
+
+
+def create_tray_icon():
+    """Create system tray icon"""
+    global tray_icon
+    
+    # Load icon image
+    try:
+        icon_image = Image.open("QATeamViewClipper.png")
+    except:
+        # Fallback: create a simple icon
+        icon_image = Image.new('RGB', (64, 64), color='blue')
+    
+    # Create menu
+    menu = pystray.Menu(
+        item('⚙️ Settings', on_settings_clicked),
+        item('📸 Capture Fullscreen', lambda icon, item: action_queue.put('fullscreen')),
+        item('🎯 Capture Region', lambda icon, item: action_queue.put('region')),
+        pystray.Menu.SEPARATOR,
+        item('❌ Exit', on_exit_clicked)
+    )
+    
+    # Create icon
+    tray_icon = pystray.Icon(
+        "ViewClipper",
+        icon_image,
+        "ViewClipper Screenshot Tool",
+        menu
+    )
+    
+    return tray_icon
+
+
+def run_tray_icon():
+    """Run system tray icon in separate thread"""
+    icon = create_tray_icon()
+    icon.run()
+
+
 def main():
+    # Check command line arguments
+    open_settings_on_start = '--settings' in sys.argv
+    
     # Load current hotkey settings for display
     hk_full = settings_manager.get('hotkey_fullscreen', 'Alt+S')
     hk_region = settings_manager.get('hotkey_region', 'Alt+R')
@@ -284,20 +356,31 @@ def main():
     print(f"    {hk_region or '(disabled)'} = Region {'→ clipboard' if region_clip else '→ editor'}")
     print(f"    {hk_predefined or '(disabled)'} = Predefined {'→ clipboard' if predef_clip else '→ editor'}")
     print(f"    {hk_settings or '(disabled)'} = Open Settings")
-    print(f"    CTRL+C = Quit")
-    print(f"\n  Predefined area margins:")
+    print(f"\n  System Tray: Right-click tray icon for menu")
+    print(f"  Predefined area margins:")
     print(f"    Top: {top}px, Bottom: {bottom}px, Left: {left}px, Right: {right}px")
     print(f"\n  Save location: {Config.SAVE_FOLDER}")
     print("=" * 60)
     
+    # Start hotkey thread
     hotkey_thread = HotkeyThread()
     hotkey_thread.start()
     
-    # Give thread time to register hotkeys
+    # Start system tray icon in separate thread
+    tray_thread = threading.Thread(target=run_tray_icon, daemon=True)
+    tray_thread.start()
+    
+    # Give threads time to start
     time.sleep(0.5)
     
+    # Open settings if requested
+    if open_settings_on_start:
+        print("\n⚙️ Opening settings window...")
+        time.sleep(0.3)  # Small delay for tray icon to appear
+        settings_manager.show_settings_window()
+    
     try:
-        while True:
+        while tray_icon and tray_icon.visible:
             try:
                 # Check for actions from hotkey thread (non-blocking with timeout)
                 action = action_queue.get(timeout=0.1)
@@ -306,6 +389,8 @@ def main():
                 pass
     except KeyboardInterrupt:
         print("\n👋 Exiting...")
+        if tray_icon:
+            tray_icon.stop()
 
 
 if __name__ == "__main__":

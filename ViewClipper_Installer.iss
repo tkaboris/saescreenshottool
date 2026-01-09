@@ -54,27 +54,25 @@ Name: "startupicon"; Description: "Start ViewClipper when Windows starts"; Group
 ; Main executable (built by PyInstaller)
 Source: "dist\ViewClipper.exe"; DestDir: "{app}"; Flags: ignoreversion
 
-; Icon file (for shortcuts)
+; Icon files (for shortcuts and system tray)
 Source: "QATeamViewClipper.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "QATeamViewClipper.png"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; Start Menu shortcut
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\QATeamViewClipper.ico"
+; Start Menu shortcut - opens Settings
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--settings"; IconFilename: "{app}\QATeamViewClipper.ico"
 
-; Desktop shortcut (optional)
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\QATeamViewClipper.ico"; Tasks: desktopicon
+; Desktop shortcut (optional) - opens Settings
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--settings"; IconFilename: "{app}\QATeamViewClipper.ico"; Tasks: desktopicon
 
-; Startup shortcut (optional)
+; Startup shortcut (optional) - runs in background
 Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startupicon
 
 ; Uninstaller in Start Menu
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
-[Run]
-; Option to run app after install
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
 
 [UninstallDelete]
-; Clean up settings and screenshots folder on uninstall (optional)
-Type: filesandordirs; Name: "{app}\screenshots"
-Type: filesandordirs; Name: "{localappdata}\ViewClipper"
+; CRITICAL FIX: Remove the app directory on uninstall
+Type: filesandordirs; Name: "{app}"

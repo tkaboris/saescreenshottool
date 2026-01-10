@@ -1,17 +1,21 @@
 import win32api
 import win32con
 import win32gui
+import win32event
+import winerror
 import threading
 import time
 import queue
 import sys
+import os
+import argparse
 from PIL import Image
 import pystray
-from pystray import MenuItem as item
 from drive_upload import upload_to_drive
 from capture import (
     capture_fullscreen, capture_region, capture_predefined, 
-    RegionSelector, save_screenshot, copy_to_clipboard
+    RegionSelector, save_screenshot, copy_to_clipboard,
+    LightshotRegionCapture
 )
 from editor import edit_image
 from config import Config
@@ -20,22 +24,48 @@ from settings import settings_manager
 # Queue for communicating with main thread
 action_queue = queue.Queue()
 
-# Global system tray icon
+# Global mutex handle
+mutex_handle = None
+
+# Global tray icon reference
 tray_icon = None
 
-# Queue for communicating with main thread
-action_queue = queue.Queue()
 
-# Global system tray icon
-tray_icon = None
+def get_resource_path(filename):
+    """Get path to resource, works for dev and PyInstaller"""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, filename)
+    else:
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
 
-# ADD THESE 5 LINES:
-import win32event
-import winerror
-mutex = win32event.CreateMutex(None, False, 'ViewClipperSingleInstanceMutex')
-if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
-    print("ViewClipper is already running!")
-    sys.exit(0)
+
+def check_single_instance():
+    """
+    Check if another instance is already running using a mutex.
+    Returns True if this is the only instance, False if another exists.
+    """
+    global mutex_handle
+    mutex_name = "QATeamViewClipperMutex_v1"
+    
+    mutex_handle = win32event.CreateMutex(None, True, mutex_name)
+    last_error = win32api.GetLastError()
+    
+    if last_error == winerror.ERROR_ALREADY_EXISTS:
+        # Another instance is running
+        if mutex_handle:
+            win32api.CloseHandle(mutex_handle)
+            mutex_handle = None
+        return False
+    
+    return True
+
+
+def release_mutex():
+    """Release the mutex when app exits"""
+    global mutex_handle
+    if mutex_handle:
+        win32api.CloseHandle(mutex_handle)
+        mutex_handle = None
 
 
 def parse_hotkey(hotkey_str):
@@ -128,6 +158,7 @@ class HotkeyThread(threading.Thread):
         super().__init__()
         self.daemon = True
         self.registered_hotkeys = []
+        self.running = True
         
     def run(self):
         # Load hotkeys from settings
@@ -168,7 +199,7 @@ class HotkeyThread(threading.Thread):
         
         try:
             msg = win32gui.GetMessage(None, 0, 0)
-            while msg:
+            while msg and self.running:
                 if msg[1][1] == win32con.WM_HOTKEY:
                     hotkey_id = msg[1][2]
                     
@@ -182,7 +213,13 @@ class HotkeyThread(threading.Thread):
                 msg = win32gui.GetMessage(None, 0, 0)
         finally:
             for hotkey_id, hotkey_str, action in self.registered_hotkeys:
-                win32gui.UnregisterHotKey(None, hotkey_id)
+                try:
+                    win32gui.UnregisterHotKey(None, hotkey_id)
+                except:
+                    pass
+    
+    def stop(self):
+        self.running = False
 
 
 def process_editor_result(result):
@@ -206,39 +243,28 @@ def process_editor_result(result):
 
 def take_screenshot_fullscreen():
     print("📸 Capturing full screen...")
-    img = capture_fullscreen()
     
-    copy_to_clip = settings_manager.get('fullscreen_copy_to_clipboard', False)
+    # Get default action from settings (clipboard vs save file)
+    default_to_clipboard = settings_manager.get('fullscreen_copy_to_clipboard', False)
     
-    if copy_to_clip:
-        copy_to_clipboard(img)
-        print("📋 Copied to clipboard!")
-    else:
-        result = edit_image(img)
-        process_editor_result(result)
+    # Always use editor with toolbar
+    from capture import FullscreenEditor
+    editor = FullscreenEditor(default_to_clipboard=default_to_clipboard)
+    result = editor.capture_and_edit()
+    process_editor_result(result)
 
 
 def take_screenshot_region():
     print("🎯 Select region (Escape to cancel)...")
     time.sleep(0.2)
     
-    selector = RegionSelector()
-    region = selector.select_region()
+    # Get default action from settings (clipboard vs save file)
+    default_to_clipboard = settings_manager.get('region_copy_to_clipboard', True)
     
-    if region:
-        print(f"📸 Capturing region: {region[2]}x{region[3]} at ({region[0]},{region[1]})")
-        img = capture_region(region)
-        
-        copy_to_clip = settings_manager.get('region_copy_to_clipboard', True)
-        
-        if copy_to_clip:
-            copy_to_clipboard(img)
-            print("📋 Copied to clipboard!")
-        else:
-            result = edit_image(img)
-            process_editor_result(result)
-    else:
-        print("❌ Cancelled")
+    # Always use Lightshot-style mode with integrated editing
+    lightshot = LightshotRegionCapture(default_to_clipboard=default_to_clipboard)
+    result = lightshot.capture_and_edit()
+    process_editor_result(result)
 
 
 def take_screenshot_predefined():
@@ -250,17 +276,15 @@ def take_screenshot_predefined():
     
     print(f"📐 Capturing predefined area (margins: top={top}, bottom={bottom}, left={left}, right={right})...")
     
+    # Get default action from settings (clipboard vs save file)
+    default_to_clipboard = settings_manager.get('predefined_copy_to_clipboard', False)
+    
+    # Always use editor with toolbar
     try:
-        img = capture_predefined(top, bottom, left, right)
-        
-        copy_to_clip = settings_manager.get('predefined_copy_to_clipboard', False)
-        
-        if copy_to_clip:
-            copy_to_clipboard(img)
-            print("📋 Copied to clipboard!")
-        else:
-            result = edit_image(img)
-            process_editor_result(result)
+        from capture import PredefinedEditor
+        editor = PredefinedEditor(top, bottom, left, right, default_to_clipboard=default_to_clipboard)
+        result = editor.capture_and_edit()
+        process_editor_result(result)
     except ValueError as e:
         print(f"❌ Error: {e}")
     except Exception as e:
@@ -277,120 +301,148 @@ def process_action(action):
         take_screenshot_predefined()
     elif action == 'settings':
         settings_manager.show_settings_window()
-
-
-def on_settings_clicked(icon, item):
-    """Tray menu: Settings clicked"""
-    action_queue.put('settings')
-
-
-def on_exit_clicked(icon, item):
-    """Tray menu: Exit clicked"""
-    print("\n👋 Exiting from tray menu...")
-    icon.stop()
+    elif action == 'exit':
+        return False  # Signal to exit
+    return True
 
 
 def create_tray_icon():
-    """Create system tray icon"""
+    """Create system tray icon with menu"""
     global tray_icon
     
     # Load icon image
+    icon_path = get_resource_path('QATeamViewClipper.png')
     try:
-        icon_image = Image.open("QATeamViewClipper.png")
+        icon_image = Image.open(icon_path)
     except:
-        # Fallback: create a simple icon
-        icon_image = Image.new('RGB', (64, 64), color='blue')
+        # Fallback - create a simple colored icon
+        icon_image = Image.new('RGB', (64, 64), color='#4a90d9')
+    
+    def on_settings(icon, item):
+        action_queue.put('settings')
+    
+    def on_fullscreen(icon, item):
+        action_queue.put('fullscreen')
+    
+    def on_region(icon, item):
+        action_queue.put('region')
+    
+    def on_exit(icon, item):
+        action_queue.put('exit')
+        icon.stop()
     
     # Create menu
     menu = pystray.Menu(
-        item('⚙️ Settings', on_settings_clicked),
-        item('📸 Capture Fullscreen', lambda icon, item: action_queue.put('fullscreen')),
-        item('🎯 Capture Region', lambda icon, item: action_queue.put('region')),
+        pystray.MenuItem('⚙️ Settings', on_settings),
         pystray.Menu.SEPARATOR,
-        item('❌ Exit', on_exit_clicked)
+        pystray.MenuItem('📸 Capture Fullscreen', on_fullscreen),
+        pystray.MenuItem('🎯 Capture Region', on_region),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem('❌ Exit', on_exit)
     )
     
-    # Create icon
+    # Create tray icon
     tray_icon = pystray.Icon(
         "ViewClipper",
         icon_image,
-        "ViewClipper Screenshot Tool",
+        "ViewClipper - Screenshot Tool",
         menu
     )
     
     return tray_icon
 
 
-def run_tray_icon():
-    """Run system tray icon in separate thread"""
-    icon = create_tray_icon()
+def run_tray_icon(icon):
+    """Run tray icon in separate thread"""
     icon.run()
 
 
 def main():
-    # Check command line arguments
-    open_settings_on_start = '--settings' in sys.argv
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='ViewClipper Screenshot Tool')
+    parser.add_argument('--settings', action='store_true', 
+                        help='Open settings window on startup')
+    args = parser.parse_args()
     
-    # Load current hotkey settings for display
-    hk_full = settings_manager.get('hotkey_fullscreen', 'Alt+S')
-    hk_region = settings_manager.get('hotkey_region', 'Alt+R')
-    hk_predefined = settings_manager.get('hotkey_predefined', '')
-    hk_settings = settings_manager.get('hotkey_settings', 'Ctrl+P')
-    
-    # Load predefined area settings
-    top = settings_manager.get('predefined_top_offset', 0)
-    bottom = settings_manager.get('predefined_bottom_offset', 50)
-    left = settings_manager.get('predefined_left_offset', 0)
-    right = settings_manager.get('predefined_right_offset', 0)
-    
-    # Load output options
-    region_clip = settings_manager.get('region_copy_to_clipboard', True)
-    full_clip = settings_manager.get('fullscreen_copy_to_clipboard', False)
-    predef_clip = settings_manager.get('predefined_copy_to_clipboard', False)
-    
-    print("=" * 60)
-    print("  📷 ViewClipper - Screenshot Tool (with Google Drive Sync)")
-    print("=" * 60)
-    print(f"  Hotkeys:")
-    print(f"    {hk_full or '(disabled)'} = Fullscreen {'→ clipboard' if full_clip else '→ editor'}")
-    print(f"    {hk_region or '(disabled)'} = Region {'→ clipboard' if region_clip else '→ editor'}")
-    print(f"    {hk_predefined or '(disabled)'} = Predefined {'→ clipboard' if predef_clip else '→ editor'}")
-    print(f"    {hk_settings or '(disabled)'} = Open Settings")
-    print(f"\n  System Tray: Right-click tray icon for menu")
-    print(f"  Predefined area margins:")
-    print(f"    Top: {top}px, Bottom: {bottom}px, Left: {left}px, Right: {right}px")
-    print(f"\n  Save location: {Config.SAVE_FOLDER}")
-    print("=" * 60)
-    
-    # Start hotkey thread
-    hotkey_thread = HotkeyThread()
-    hotkey_thread.start()
-    
-    # Start system tray icon in separate thread
-    tray_thread = threading.Thread(target=run_tray_icon, daemon=True)
-    tray_thread.start()
-    
-    # Give threads time to start
-    time.sleep(0.5)
-    
-    # Open settings if requested
-    if open_settings_on_start:
-        print("\n⚙️ Opening settings window...")
-        time.sleep(0.3)  # Small delay for tray icon to appear
-        settings_manager.show_settings_window()
+    # Check for single instance
+    if not check_single_instance():
+        print("ViewClipper is already running.")
+        sys.exit(0)
     
     try:
-        while tray_icon and tray_icon.visible:
-            try:
-                # Check for actions from hotkey thread (non-blocking with timeout)
-                action = action_queue.get(timeout=0.1)
-                process_action(action)
-            except queue.Empty:
-                pass
-    except KeyboardInterrupt:
-        print("\n👋 Exiting...")
-        if tray_icon:
-            tray_icon.stop()
+        # If --settings flag passed, queue settings to open after tray starts
+        open_settings_on_start = args.settings
+        
+        # Load current hotkey settings for display
+        hk_full = settings_manager.get('hotkey_fullscreen', 'Alt+S')
+        hk_region = settings_manager.get('hotkey_region', 'Alt+R')
+        hk_predefined = settings_manager.get('hotkey_predefined', '')
+        hk_settings = settings_manager.get('hotkey_settings', 'Ctrl+P')
+        
+        # Load predefined area settings
+        top = settings_manager.get('predefined_top_offset', 0)
+        bottom = settings_manager.get('predefined_bottom_offset', 50)
+        left = settings_manager.get('predefined_left_offset', 0)
+        right = settings_manager.get('predefined_right_offset', 0)
+        
+        # Load output options
+        region_clip = settings_manager.get('region_copy_to_clipboard', True)
+        full_clip = settings_manager.get('fullscreen_copy_to_clipboard', False)
+        predef_clip = settings_manager.get('predefined_copy_to_clipboard', False)
+        
+        print("=" * 60)
+        print("  📷 ViewClipper - Screenshot Tool (with Google Drive Sync)")
+        print("=" * 60)
+        print(f"  Hotkeys:")
+        print(f"    {hk_full or '(disabled)'} = Fullscreen {'→ clipboard' if full_clip else '→ editor'}")
+        print(f"    {hk_region or '(disabled)'} = Region {'→ clipboard' if region_clip else '→ editor'}")
+        print(f"    {hk_predefined or '(disabled)'} = Predefined {'→ clipboard' if predef_clip else '→ editor'}")
+        print(f"    {hk_settings or '(disabled)'} = Open Settings")
+        print(f"\n  System Tray: Right-click tray icon for menu")
+        print(f"\n  Predefined area margins:")
+        print(f"    Top: {top}px, Bottom: {bottom}px, Left: {left}px, Right: {right}px")
+        print(f"\n  Save location: {Config.SAVE_FOLDER}")
+        print("=" * 60)
+        
+        # Start hotkey thread
+        hotkey_thread = HotkeyThread()
+        hotkey_thread.start()
+        
+        # Create and start system tray icon
+        tray = create_tray_icon()
+        tray_thread = threading.Thread(target=run_tray_icon, args=(tray,), daemon=True)
+        tray_thread.start()
+        
+        # Give thread time to register hotkeys and tray to initialize
+        time.sleep(0.5)
+        
+        # If --settings was passed, open settings now (after tray is running)
+        if open_settings_on_start:
+            action_queue.put('settings')
+        
+        try:
+            running = True
+            while running:
+                try:
+                    # Check for actions from hotkey thread or tray menu (non-blocking with timeout)
+                    action = action_queue.get(timeout=0.1)
+                    running = process_action(action)
+                except queue.Empty:
+                    pass
+        except KeyboardInterrupt:
+            print("\n👋 Exiting...")
+        finally:
+            # Stop tray icon
+            if tray_icon:
+                try:
+                    tray_icon.stop()
+                except:
+                    pass
+            # Stop hotkey thread
+            hotkey_thread.stop()
+            
+    finally:
+        release_mutex()
 
 
 if __name__ == "__main__":

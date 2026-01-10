@@ -88,3 +88,6 @@ This is common with PyInstaller. Users may need to add an exception.
 
 **Icon not showing:**
 Make sure `QATeamViewClipper.ico` is in the project folder before building.
+
+install.bat    ← Reinstall to get new library
+build.bat      ← Rebuild the .exe

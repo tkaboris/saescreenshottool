@@ -1,6 +1,10 @@
 # Core dependencies
 pywin32>=306
 Pillow>=10.0.0
+mss>=9.0.0
+
+# System tray icon
+pystray>=0.19.5
 
 # Google Drive integration
 google-api-python-client>=2.100.0
@@ -9,9 +13,3 @@ google-auth-oauthlib>=1.1.0
 
 # For building executable
 pyinstaller>=6.0.0
-
-# System tray icon
-pystray>=0.19.5
-
-# Screen capture (ADD THIS LINE)
-mss>=9.0.0
